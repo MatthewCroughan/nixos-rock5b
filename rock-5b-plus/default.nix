@@ -12,9 +12,7 @@ in
 {
   options.hardware.rock-5b-plus = {
     enable = lib.mkEnableOption "";
-    platformFirmware = lib.mkPackageOption pkgs "platform firmware" {
-      default = pkgs.ubootRock5ModelB;
-    };
+    platformFirmware = lib.mkPackageOption pkgs "ubootRock5ModelB" {};
     zealous = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -28,7 +26,7 @@ in
       };
       repart = {
         enable = lib.mkEnableOption "Generate a disk image using systemd-repart that boots using a sensible default UEFI boot flow, and place it in config.system.build.image";
-        repart.format = lib.mkOption {
+        format = lib.mkOption {
           type = lib.types.str;
           default = "ext4";
           description = "Filesystem format for systemd-repart";
@@ -41,12 +39,6 @@ in
   ];
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
-      system.build.image-with-uboot = config.system.build.image.overrideAttrs (old: {
-        nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.gptfdisk pkgs.util-linux ];
-        preInstall = ''
-          dd if=${cfg.platformFirmware}/u-boot-rockchip.bin of=${config.image.repart.imageFileBasename}.raw seek=64 conv=notrunc
-        '';
-      });
       hardware.deviceTree.name = "rockchip/rk3588-rock-5b-plus.dtb";
       warnings = lib.optional (config.boot.kernelPackages.kernel.kernelOlder "6.18") ''
         the kernel version you are using (${config.boot.kernelPackages.kernel.version}) is < 6.18, mainline support was not great back then, you should use a newer kernel.
@@ -63,7 +55,7 @@ in
       systemd.repart.enable = true;
       systemd.repart.partitions."30-root".Type = "root";
       boot = {
-        initrd.supportedFilesystems."${cfg.image.format}" = true;
+        initrd.supportedFilesystems."${cfg.image.repart.format}" = true;
         loader.systemd-boot.enable = true;
       };
       fileSystems =
@@ -77,6 +69,11 @@ in
             fsType = "vfat";
           };
         };
+      system.build.image-with-uboot = lib.mkIf cfg.image.embedUboot (config.system.build.image.overrideAttrs (old: {
+        preInstall = ''
+          dd if=${cfg.platformFirmware}/u-boot-rockchip.bin of=${config.image.repart.imageFileBasename}.raw seek=64 conv=notrunc
+        '';
+      }));
       image.repart = {
         name = "image";
         partitions = {
@@ -93,10 +90,6 @@ in
                 "${pkgs.systemd}/lib/systemd/boot/efi/systemd-boot${efiArch}.efi";
               "/EFI/Linux/${config.system.boot.loader.ukiFile}".source =
                 "${config.system.build.uki}/${config.system.boot.loader.ukiFile}";
-              "/loader/loader.conf".source = pkgs.writeText "loader.conf" ''
-                timeout 5
-                console-mode keep
-              '';
             };
             repartConfig = {
               Type = "esp";
@@ -111,7 +104,7 @@ in
             contents."/boot".source = pkgs.runCommand "boot" { } "mkdir $out";
             repartConfig = {
               Type = "root";
-              Format = "${cfg.image.format}";
+              Format = "${cfg.image.repart.format}";
               Label = "nixos";
               Minimize = "guess";
               GrowFileSystem = true;

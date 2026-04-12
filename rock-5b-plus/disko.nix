@@ -2,52 +2,57 @@
   pkgs,
   lib,
   config,
-  inputs,
   ...
 }:
 let
   cfg = config.hardware.rock-5b-plus;
-  efiArch = pkgs.stdenv.hostPlatform.efiArch;
 in
 {
   options.hardware.rock-5b-plus = {
     image = {
-      useDisko = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Use Disko to generate the disk image, the filesystems mount options will also be set due to usage of Disko";
-      };
-      format = lib.mkOption {
-        type = lib.types.str;
-        default = "ext4";
-        description = "Filesystem format for systemd-repart";
+      disko = {
+        enable = lib.mkEnableOption "Generate a ZFS disk image using Disko that boots using a sensible default UEFI boot flow, and place it in config.system.build.image";
+        compress = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Compress the result of disko's image builder using zstd";
+        };
+        imageSize = lib.mkOption {
+          type = lib.types.str;
+          default = "4G";
+          description = "The image size passed to Disko";
+        };
       };
     };
   };
-  imports = [
-    inputs.disko.nixosModules.default
-  ];
-  config = lib.mkIf (cfg.image.generateImage && cfg.image.useDisko && cfg.enable) {
+  config = lib.mkIf (cfg.image.disko.enable && cfg.enable) {
     assertions = [
       {
-        assertion = cfg.image.useDisko && cfg.image.useRepart;
+        assertion = !(cfg.image.disko.enable && cfg.image.repart.enable);
         message = ''
-          The options hardware.rock-5b-plus.useDisko and hardware.rock-5b-plus.useRepart
+          The options hardware.rock-5b-plus.disko.enable and hardware.rock-5b-plus.repart.enable
           are mutually exclusive.
         '';
       }
     ];
     networking.hostId = lib.mkDefault "00000000";
     services.zfs.autoScrub.enable = lib.mkDefault true;
-    boot.supportedFilesystems.zfs = true;
-    disko.extraPostVM = ''
-      ${lib.getExe' pkgs.coreutils "dd"} conv=notrunc,fsync if=${config.hardware.rockchip.platformFirmware}/u-boot-rockchip.bin of=$out/${config.hardware.rockchip.diskoImageName} bs=512 seek=64
+    boot = {
+      loader.systemd-boot.enable = true;
+      supportedFilesystems.zfs = true;
+    };
+    disko.imageBuilder.extraPostVM = lib.optionalString cfg.image.embedUboot ''
+      ${lib.getExe' pkgs.coreutils "dd"} conv=notrunc,fsync if=${cfg.platformFirmware}/u-boot-rockchip.bin of=$out/${config.disko.devices.disk.disk1.imageName} bs=512 seek=64
+    '' + lib.optionalString cfg.image.disko.compress ''
+      ${pkgs.zstd}/bin/zstd --compress $out/*raw
+      rm $out/*raw
     '';
+    disko.memSize = 4096;
     disko.devices = {
       disk = {
         disk1 = {
-          imageSize = "10G";
-          device = "/dev/sdX";
+         imageSize = cfg.image.disko.imageSize;
+#          device = "/dev/sdX";
           type = "disk";
           content = {
             type = "gpt";
@@ -55,6 +60,7 @@ in
               ESP = {
                 type = "EF00";
                 size = "2G";
+                start = lib.mkIf cfg.image.embedUboot "16M";
                 content = {
                   type = "filesystem";
                   format = "vfat";
@@ -80,12 +86,14 @@ in
             compression = "zstd";
             dnodesize = "auto";
             normalization = "formD";
-            relatime = "on";
+            relatime = "off";
+            atime = "off";
             xattr = "sa";
           };
           options = {
             ashift = "12";
             autotrim = "on";
+            autoexpand = "on";
           };
           datasets = {
             "root" = {
