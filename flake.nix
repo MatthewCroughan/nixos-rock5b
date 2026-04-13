@@ -8,7 +8,7 @@
   outputs = inputs@{ flake-parts, self, disko, nixpkgs, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "aarch64-linux" ];
-      flake = let 
+      flake = let
         system = "x86_64-linux";
       in {
         packages.${system}.docs = inputs.unf.lib.html {
@@ -21,7 +21,7 @@
           # the intended base path for files referred to by your docs, ie. your public repo
           newPath = "https://git.atagen.co/atagen/unf";
           # the modules you wish to document
-          modules = [ ./rock-5b-plus ];
+          modules = [ ./rock-5b-plus/disko.nix ];
           # any options the user wishes to pass to nixosOptionsDoc
           userOpts = { warningsAreErrors = false; };
         };
@@ -34,9 +34,8 @@
             disko.nixosModules.default
             {
               hardware.rock-5b-plus.enable = true;
-              hardware.rock-5b-plus.image.disko.enable = true;
+              hardware.rock-5b-plus.image.repart.enable = true;
               hardware.rock-5b-plus.image.embedUboot = true;
-#              hardware.rock-5b-plus.image.repart.enable = true;
             }
           ];
         };

@@ -11,16 +11,16 @@ in
   options.hardware.rock-5b-plus = {
     image = {
       disko = {
-        enable = lib.mkEnableOption "Generate a ZFS disk image using Disko that boots using a sensible default UEFI boot flow, and place it in config.system.build.image";
+        enable = lib.mkEnableOption "Generate a ZFS disk image using Disko. Enabling this will also enable systemd-boot and boot using UEFI therefore. The image can be built via config.system.build.diskoImages";
         compress = lib.mkOption {
           type = lib.types.bool;
           default = true;
-          description = "Compress the result of disko's image builder using zstd";
+          description = "Compress the result of the Disko image builder by using zstd";
         };
         imageSize = lib.mkOption {
           type = lib.types.str;
           default = "4G";
-          description = "The image size passed to Disko";
+          description = "The image size passed to Disko. This will vary depending on the closure size of your config";
         };
       };
     };
@@ -124,4 +124,3 @@ in
     };
   };
 }
-

@@ -26,9 +26,14 @@ in
       };
       repart = {
         enable = lib.mkEnableOption "Generate a disk image using systemd-repart that boots using a sensible default UEFI boot flow, and place it in config.system.build.image";
+        compress = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Compress the result of the repart image builder";
+        };
         format = lib.mkOption {
           type = lib.types.str;
-          default = "ext4";
+          default = "btrfs";
           description = "Filesystem format for systemd-repart";
         };
       };
@@ -62,7 +67,7 @@ in
         {
           "/" = {
             device = "/dev/disk/by-label/nixos";
-            fsType = "ext4";
+            fsType = cfg.image.repart.format;
           };
           "/boot" = {
             device = "/dev/disk/by-label/ESP";
@@ -76,6 +81,7 @@ in
       }));
       image.repart = {
         name = "image";
+        compression.enable = cfg.image.repart.compress;
         partitions = {
           "10-uboot-padding" = lib.mkIf cfg.image.embedUboot {
             repartConfig = {
